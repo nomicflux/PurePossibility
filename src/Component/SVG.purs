@@ -1,39 +1,50 @@
 module Component.SVG where
 
-import Data.Function (($))
-import Data.Maybe (Maybe(..))
-import Halogen.HTML.Core (HTML, ElemName(ElemName), PropName(..), AttrName(..))
-import Halogen.HTML.Elements (Node, Leaf)
-import Halogen.HTML.Properties (I, IProp, prop)
-
-import Halogen.VDom as VDom
-import Halogen.VDom.DOM.Prop (Prop)
-
-import Unsafe.Coerce (unsafeCoerce)
+import Halogen.HTML (ElemName(..), HTML, Namespace(..), PropName(..))
+import Halogen.HTML.Elements (elementNS)
+import Halogen.HTML.Properties (IProp, prop)
 
 svgns :: String
 svgns = "http://www.w3.org/2000/svg"
 
--- | A smart constructor for SVG elements.
-celement :: forall p i. VDom.ElemName -> Array (Prop i) -> Array (HTML p i) -> HTML p i
-celement = coe (\name props children -> VDom.Elem (VDom.ElemSpec ns name props) children)
-  where
-    coe :: (VDom.ElemName -> Array (Prop i) -> Array (VDom.VDom (Array (Prop i)) p) -> VDom.VDom (Array (Prop i)) p)
-           -> VDom.ElemName -> Array (Prop i) -> Array (HTML p i) -> HTML p i
-    coe = unsafeCoerce
-    ns :: Maybe VDom.Namespace
-    ns = Just $ VDom.Namespace svgns
+svgNamespace :: Namespace
+svgNamespace = Namespace svgns
 
--- | Creates an SVG element that expects indexed properties.
-element :: forall r p i. ElemName -> Array (IProp r i) -> Array (HTML p i) -> HTML p i
-element = coe celement
-  where
-    coe :: (ElemName -> Array (Prop i) -> Array (HTML p i) -> HTML p i)
-           -> ElemName -> Array (IProp r i) -> Array (HTML p i) -> HTML p i
-    coe = unsafeCoerce
+svgElement :: forall r p i. ElemName -> Array (IProp r i) -> Array (HTML p i) -> HTML p i
+svgElement = elementNS svgNamespace
 
-svg :: forall p i. Node (viewBox :: I, height :: I, width :: I) p i
-svg = element (ElemName "svg")
+svg :: forall r p i. Array (IProp r i) -> HTML p i
+svg props = svgElement (ElemName "svg") props []
 
-circle :: forall p i. Leaf (cx :: I, cy :: I, r :: I) p i
-circle props = element (ElemName "circle") props []
+circle :: forall r p i. Array (IProp r i) -> HTML p i
+circle props = svgElement (ElemName "circle") props []
+
+line :: forall r p i. Array (IProp r i) -> HTML p i
+line props = svgElement (ElemName "line") props []
+
+cx :: forall r i. Int -> IProp (cx :: Int | r) i
+cx = prop (PropName "cx")
+
+cy :: forall r i. Int -> IProp (cy :: Int | r) i
+cy = prop (PropName "cy")
+
+r :: forall rty i. Int -> IProp (r :: Int | rty) i
+r = prop (PropName "r")
+
+x1 :: forall r i. Int -> IProp (x1 :: Int | r) i
+x1 = prop (PropName "x1")
+
+y1 :: forall r i. Int -> IProp (y1 :: Int | r) i
+y1 = prop (PropName "y1")
+
+x2 :: forall r i. Int -> IProp (x2 :: Int | r) i
+x2 = prop (PropName "x2")
+
+y2 :: forall r i. Int -> IProp (y2 :: Int | r) i
+y2 = prop (PropName "y2")
+
+stroke :: forall r i. String -> IProp (stroke :: String | r) i
+stroke = prop (PropName "stroke")
+
+fill :: forall r i. String -> IProp (fill :: String | r) i
+fill = prop (PropName "fill")
