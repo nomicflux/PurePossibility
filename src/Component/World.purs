@@ -18,7 +18,7 @@ type State =
   , color :: String
   }
 
-data Query a = ChangePosition Int Int a | ChangeColor String a
+data Query a = ChangePosition Int Int (Unit -> a) | ChangeColor String (Unit -> a)
 
 data Slot = Slot Id
 derive instance eqSlot :: Eq Slot
@@ -42,7 +42,7 @@ offset :: Int
 offset = 5
 
 scale :: Int
-scale = 10
+scale = 3
 
 render :: State -> H.ComponentHTML Query
 render state =
@@ -51,32 +51,27 @@ render state =
     width = boxRadius
     height = width
   in
-   SVG.svg [ SVG.width $ scale * width
-           , SVG.height $ scale * height
-           , SVG.viewBox (intercalate " " [ show (-width)
-                                          , show (-height)
-                                          , show $ width * 2
-                                          , show $ height * 2
-                                          ])
+   SVG.svg [ --SVG.width 500
+           --, SVG.height 500
            ]
-           [ SVG.circle [ SVG.cx state.x
-                        , SVG.cy state.y
+           [ SVG.circle [ SVG.cx $ state.x - state.r
+                        , SVG.cy $ state.y - state.r
                         , SVG.r state.r
                         , SVG.stroke state.color
                         , SVG.fill "white"
                         ]
            , SVG.text [ SVG.stroke "black"
-                      , SVG.x (state.x - 3)
-                      , SVG.y (state.y - state.r - 2)
+                      , SVG.x (state.x - state.r - 3)
+                      , SVG.y (state.y - 2 * state.r - 2)
                       , SVG.class_ "world-id"
                       ] [ HH.text (show state.id) ]
            ]
 
 eval :: forall m. Query ~> H.ComponentDSL State Query Message m
 eval = case _ of
-  ChangePosition x y next -> do
+  ChangePosition x y reply -> do
     H.modify_ (_ { x = x, y = y})
-    pure next
-  ChangeColor color next -> do
+    pure (reply unit)
+  ChangeColor color reply -> do
     H.modify_ (_ { color = color })
-    pure next
+    pure (reply unit)

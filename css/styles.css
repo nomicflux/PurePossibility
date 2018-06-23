@@ -1,3 +1,7 @@
 .world-id {
     font-size: 10px;
 }
+
+.world-svg {
+    border: 3px ridge black;
+}
