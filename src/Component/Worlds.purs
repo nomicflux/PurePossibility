@@ -2,14 +2,20 @@ module Component.Worlds where
 
 import Prelude
 
-import Component.SVG as SVG
+import Component.Common.Offset (getCoordinates)
+import Component.Common.SVG as SVG
 import Component.World as W
-import Data.Array (filter, (:))
-import Data.Maybe (Maybe(..))
+import Data.Array ((:))
+import Data.Array as A
+import Data.List as L
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set as S
+import Effect.Aff (Aff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
-import Web.UIEvent.MouseEvent (MouseEvent, clientX, clientY)
+import Halogen.HTML.Properties as HP
+import Web.UIEvent.MouseEvent (MouseEvent)
 
 data CanvasState = AddingWorlds | RemovingWorlds | DraggingWorlds | AddingRelations
 
@@ -27,12 +33,11 @@ initialState =
   }
 
 data Query a =
-  AddWorld MouseEvent a
+  Click MouseEvent a
   | ChangeCanvasState CanvasState a
-  | RemoveWorld W.Id a
   | HandleWorld W.Id W.Message a
 
-component :: forall m. H.Component HH.HTML Query Unit Void m
+component :: H.Component HH.HTML Query Unit Void Aff
 component =
   H.parentComponent
   { initialState : const initialState
@@ -47,39 +52,59 @@ renderWorld :: forall m.
 renderWorld id =
   HH.slot (W.Slot id) W.component id (HE.input $ HandleWorld id)
 
+canvasRef :: H.RefLabel
+canvasRef = H.RefLabel "world-canvas"
+
 renderCanvas :: forall m. Array W.Id ->
                HH.HTML (H.ComponentSlot HH.HTML W.Query m W.Slot (Query Unit)) (Query Unit)
 renderCanvas worlds =
-  SVG.svg [ SVG.width 500
-          , SVG.height 500
-          , SVG.viewBox "0 0 500 500"
-          , SVG.class_ "world-svg"
-          , HE.onClick (HE.input AddWorld)
-          ] (renderWorld <$> worlds)
-
+  HH.div [ HP.ref canvasRef
+         , HP.class_ $ HH.ClassName "world-canvas"
+         ]
+  [ SVG.svg [ SVG.width 500
+            , SVG.height 500
+            , SVG.viewBox "0 0 500 500"
+            , SVG.class_ "world-svg"
+            , HE.onClick (HE.input Click)
+            ] (renderWorld <$> worlds)
+  ]
 
 render :: forall m. State -> H.ParentHTML Query W.Query W.Slot m
 render state =
   HH.div [] [ renderCanvas state.worlds ]
 
-eval :: forall m. Query ~> H.ParentDSL State Query W.Query W.Slot Void m
-eval = case _ of
-  AddWorld mouseEvent next -> do
-    let
-      x = clientX mouseEvent
-      y = clientY mouseEvent
-    nextId <- H.gets _.maxId
-    worlds <- H.gets _.worlds
-    H.modify_ (_ { worlds = nextId : worlds, maxId = nextId + 1})
-    _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition x y)
-    pure next
-  RemoveWorld id next -> do
-    worlds <- H.gets _.worlds
-    let newWorlds = filter (_ /= id) worlds
-    H.modify_ (_ { worlds = newWorlds })
-    pure next
-  ChangeCanvasState newState next -> do
+fromMaybeM :: forall a m.
+              a ->
+              H.ParentDSL State Query W.Query W.Slot Void m (Maybe a) ->
+              H.ParentDSL State Query W.Query W.Slot Void m a
+fromMaybeM def = map (fromMaybe def)
+
+eval :: Query ~> H.ParentDSL State Query W.Query W.Slot Void Aff
+eval (Click mouseEvent next) =
+  H.gets (_.canvasState) >>= case _ of
+    AddingWorlds -> do
+      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+      nextId <- H.gets _.maxId
+      worlds <- H.gets _.worlds
+      H.modify_ (_ { worlds = nextId : worlds, maxId = nextId + 1})
+      _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition coordinates)
+      pure next
+    RemovingWorlds -> do
+      worlds <- H.gets (_.worlds >>> L.fromFoldable)
+      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+      let clicked id = H.query (W.Slot id) $ H.request (W.Clicked coordinates)
+      ids <- L.filterM (fromMaybeM false <<< clicked) worlds
+      let removed = S.fromFoldable ids
+          newWorlds = A.fromFoldable $ L.filter (\id -> not S.member id removed) worlds
+      H.modify_ (_ { worlds = newWorlds })
+      pure next
+    DraggingWorlds -> do
+      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+      pure next
+    AddingRelations -> do
+      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+      pure next
+eval (ChangeCanvasState newState next) = do
     H.modify_ (_ { canvasState = newState })
     pure next
-  HandleWorld _query _id next -> do
-    pure next
+eval (HandleWorld _query _id next) = pure next

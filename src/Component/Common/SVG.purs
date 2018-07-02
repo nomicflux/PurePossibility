@@ -1,4 +1,4 @@
-module Component.SVG where
+module Component.Common.SVG where
 
 import Halogen.HTML (AttrName(..), ElemName(..), HTML, Namespace(..))
 import Halogen.HTML.Elements (elementNS)
@@ -23,11 +23,17 @@ text = svgElement (ElemName "text")
 circle :: forall r p i. Array (IProp r i) -> HTML p i
 circle props = svgElement (ElemName "circle") props []
 
+rect :: forall r p i. Array (IProp r i) -> HTML p i
+rect props = svgElement (ElemName "rect") props []
+
 line :: forall r p i. Array (IProp r i) -> HTML p i
 line props = svgElement (ElemName "line") props []
 
 width :: forall r i. Int -> IProp (width :: Int | r) i
 width = attr (AttrName "width") <<< show
+
+strokeWidth :: forall r i. Int -> IProp (strokeWidth :: Int | r) i
+strokeWidth = attr (AttrName "stroke-width") <<< show
 
 height :: forall r i. Int -> IProp (height :: Int | r) i
 height = attr (AttrName "height") <<< show

@@ -2,8 +2,9 @@ module Component.World where
 
 import Prelude
 
-import Component.SVG as SVG
-import Data.Foldable (intercalate)
+import Component.Common.Offset (Coordinates)
+import Component.Common.SVG as SVG
+import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..))
 import Halogen as H
 import Halogen.HTML as HH
@@ -18,7 +19,10 @@ type State =
   , color :: String
   }
 
-data Query a = ChangePosition Int Int (Unit -> a) | ChangeColor String (Unit -> a)
+data Query a =
+  ChangePosition Coordinates (Unit -> a)
+  | ChangeColor String (Unit -> a)
+  | Clicked Coordinates (Boolean -> a)
 
 data Slot = Slot Id
 derive instance eqSlot :: Eq Slot
@@ -51,27 +55,34 @@ render state =
     width = boxRadius
     height = width
   in
-   SVG.svg [ --SVG.width 500
-           --, SVG.height 500
-           ]
-           [ SVG.circle [ SVG.cx $ state.x - state.r
-                        , SVG.cy $ state.y - state.r
+   SVG.svg [ ]
+           [ SVG.circle [ SVG.cx $ state.x
+                        , SVG.cy $ state.y
                         , SVG.r state.r
                         , SVG.stroke state.color
                         , SVG.fill "white"
                         ]
            , SVG.text [ SVG.stroke "black"
-                      , SVG.x (state.x - state.r - 3)
-                      , SVG.y (state.y - 2 * state.r - 2)
+                      , SVG.x (state.x - 3)
+                      , SVG.y (state.y - state.r - 2)
                       , SVG.class_ "world-id"
                       ] [ HH.text (show state.id) ]
            ]
 
 eval :: forall m. Query ~> H.ComponentDSL State Query Message m
 eval = case _ of
-  ChangePosition x y reply -> do
-    H.modify_ (_ { x = x, y = y})
+  ChangePosition coordinates reply -> do
+    H.modify_ (_ { x = round coordinates.x
+                 , y = round coordinates.y
+                 })
     pure (reply unit)
   ChangeColor color reply -> do
     H.modify_ (_ { color = color })
     pure (reply unit)
+  Clicked coordinates reply -> do
+    state <- H.get
+    let minX = toNumber $ state.x - state.r
+        maxX = toNumber $ state.x + state.r
+        minY = toNumber $ state.y - state.r
+        maxY = toNumber $ state.y + state.r
+    pure $ reply (coordinates.x <= maxX && coordinates.x >= minX && coordinates.y <= maxY && coordinates.y >= minY)
