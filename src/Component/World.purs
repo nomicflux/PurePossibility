@@ -6,6 +6,8 @@ import Component.Common.Offset (Coordinates)
 import Component.Common.SVG as SVG
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..))
+import Data.Set (Set)
+import Data.Set as S
 import Halogen as H
 import Halogen.HTML as HH
 
@@ -17,10 +19,12 @@ type State =
   , y :: Int
   , r :: Int
   , color :: String
+  , relations :: Set Id
   }
 
 data Query a =
   ChangePosition Coordinates (Unit -> a)
+  | AddRelation (Set Id) (Unit -> a)
   | ChangeColor String (Unit -> a)
   | Clicked Coordinates (Boolean -> a)
 
@@ -40,7 +44,7 @@ component =
   }
 
 initialState :: Id -> State
-initialState id = { id, x: 0, y: 0, r: 10, color: "black" }
+initialState id = { id, x: 0, y: 0, r: 10, color: "black", relations: S.empty }
 
 offset :: Int
 offset = 5
@@ -76,6 +80,10 @@ eval = case _ of
                  , y = round coordinates.y
                  })
     pure (reply unit)
+  AddRelation ids reply -> do
+    currRels <- H.gets (_.relations)
+    H.modify_ (_ { relations = S.union currRels ids})
+    pure $ reply unit
   ChangeColor color reply -> do
     H.modify_ (_ { color = color })
     pure (reply unit)

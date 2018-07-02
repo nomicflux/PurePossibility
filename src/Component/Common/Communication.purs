@@ -2,6 +2,7 @@ module Component.Common.Communication where
 
 import Prelude
 
+import Data.Foldable (class Foldable)
 import Data.Foldable as F
 import Data.Maybe (Maybe)
 import Data.Traversable as T
@@ -12,6 +13,16 @@ passAlong :: forall s f g p o m a. Eq p =>
              H.ParentDSL s f g p o m Unit
 passAlong query = do
   slots <- H.getSlots
+  let action slot = H.query slot $ H.request query
+  _ <- T.traverse_ action slots
+  pure unit
+
+passAlongTo :: forall l s f g p o m a. Eq p =>
+               Foldable l =>
+               l p ->
+               (H.Request g a) ->
+               H.ParentDSL s f g p o m Unit
+passAlongTo slots query = do
   let action slot = H.query slot $ H.request query
   _ <- T.traverse_ action slots
   pure unit

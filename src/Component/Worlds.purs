@@ -2,13 +2,16 @@ module Component.Worlds where
 
 import Prelude
 
+import Component.Common.Communication (passAlongTo)
 import Component.Common.Offset (getCoordinates)
 import Component.Common.SVG as SVG
 import Component.World as W
 import Data.Array ((:))
 import Data.Array as A
+import Data.List (List)
 import Data.List as L
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set (Set)
 import Data.Set as S
 import Effect.Aff (Aff)
 import Halogen as H
@@ -23,6 +26,7 @@ type State =
   { worlds :: Array W.Id
   , maxId :: Int
   , canvasState :: CanvasState
+  , selectedWorlds :: Set W.Id
   }
 
 initialState :: State
@@ -30,6 +34,7 @@ initialState =
   { worlds: []
   , maxId: 0
   , canvasState: AddingWorlds
+  , selectedWorlds: S.empty
   }
 
 data Query a =
@@ -79,6 +84,13 @@ fromMaybeM :: forall a m.
               H.ParentDSL State Query W.Query W.Slot Void m a
 fromMaybeM def = map (fromMaybe def)
 
+clickedWorlds :: MouseEvent -> H.ParentDSL State Query W.Query W.Slot Void Aff (List W.Id)
+clickedWorlds mouseEvent = do
+  coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+  worlds <- H.gets (_.worlds >>> L.fromFoldable)
+  let clicked id = H.query (W.Slot id) $ H.request (W.Clicked coordinates)
+  L.filterM (fromMaybeM false <<< clicked) worlds
+
 eval :: Query ~> H.ParentDSL State Query W.Query W.Slot Void Aff
 eval (Click mouseEvent next) =
   H.gets (_.canvasState) >>= case _ of
@@ -91,9 +103,7 @@ eval (Click mouseEvent next) =
       pure next
     RemovingWorlds -> do
       worlds <- H.gets (_.worlds >>> L.fromFoldable)
-      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
-      let clicked id = H.query (W.Slot id) $ H.request (W.Clicked coordinates)
-      ids <- L.filterM (fromMaybeM false <<< clicked) worlds
+      ids <- clickedWorlds mouseEvent
       let removed = S.fromFoldable ids
           newWorlds = A.fromFoldable $ L.filter (\id -> not S.member id removed) worlds
       H.modify_ (_ { worlds = newWorlds })
@@ -102,7 +112,13 @@ eval (Click mouseEvent next) =
       coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
       pure next
     AddingRelations -> do
-      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+      selected <- H.gets (_.selectedWorlds)
+      ids <- clickedWorlds mouseEvent
+      case S.isEmpty selected of
+        true -> H.modify_ (_ { selectedWorlds = selected })
+        false -> do
+          passAlongTo (W.Slot <$> L.fromFoldable ids) (W.AddRelation selected)
+          H.modify_ (_ { selectedWorlds = S.empty :: Set W.Id })
       pure next
 eval (ChangeCanvasState newState next) = do
     H.modify_ (_ { canvasState = newState })
