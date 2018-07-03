@@ -38,3 +38,16 @@ getBack accumulator def query = do
         these <- H.query slot $ H.request query
         pure $ accumulator acc these
   F.foldM action def slots
+
+getBackFrom :: forall l s f g p o m a b.
+               Eq p =>
+               Foldable l =>
+               l p ->
+               (b -> Maybe a -> b) -> b ->
+               (H.Request g a) ->
+               H.ParentDSL s f g p o m b
+getBackFrom slots accumulator def query = do
+  let action acc slot = do
+        these <- H.query slot $ H.request query
+        pure $ accumulator acc these
+  F.foldM action def slots

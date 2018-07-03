@@ -24,6 +24,7 @@ type State =
 
 data Query a =
   ChangePosition Coordinates (Unit -> a)
+  | GetCoordinates (Coordinates -> a)
   | AddRelation (Set Id) (Unit -> a)
   | ChangeColor String (Unit -> a)
   | Clicked Coordinates (Boolean -> a)
@@ -64,7 +65,7 @@ render state =
                         , SVG.cy $ state.y
                         , SVG.r state.r
                         , SVG.stroke state.color
-                        , SVG.fill "white"
+                        , SVG.class_ "world world-base"
                         ]
            , SVG.text [ SVG.stroke "black"
                       , SVG.x (state.x - 3)
@@ -73,6 +74,12 @@ render state =
                       ] [ HH.text (show state.id) ]
            ]
 
+getCoordinates :: State -> Coordinates
+getCoordinates state =
+  { x: toNumber state.x
+  , y: toNumber state.y
+  }
+
 eval :: forall m. Query ~> H.ComponentDSL State Query Message m
 eval = case _ of
   ChangePosition coordinates reply -> do
@@ -80,6 +87,8 @@ eval = case _ of
                  , y = round coordinates.y
                  })
     pure (reply unit)
+  GetCoordinates reply ->
+    H.gets getCoordinates >>= (pure <<< reply)
   AddRelation ids reply -> do
     currRels <- H.gets (_.relations)
     H.modify_ (_ { relations = S.union currRels ids})
