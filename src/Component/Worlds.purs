@@ -14,6 +14,7 @@ import Data.List as L
 import Data.Map (Map)
 import Data.Map as M
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set (Set)
 import Data.Set as S
 import Effect.Aff (Aff)
 import Halogen as H
@@ -29,8 +30,9 @@ type State =
   { worlds :: Array W.Id
   , maxId :: Int
   , canvasState :: CanvasState
-  , selectedWorlds :: Map W.Id (Maybe Coordinates)
+  , selectedWorlds :: Set W.Id
   , mouseAt :: List Coordinates
+  , coordinateMap :: Map W.Id Coordinates
   }
 
 initialState :: State
@@ -38,8 +40,9 @@ initialState =
   { worlds: []
   , maxId: 0
   , canvasState: AddingWorlds
-  , selectedWorlds: M.empty
+  , selectedWorlds: S.empty
   , mouseAt: Nil
+  , coordinateMap: M.empty
   }
 
 data Query a =
@@ -115,7 +118,8 @@ render state =
                     H.ParentHTML Query W.Query W.Slot m
     renderCanvas worlds =
       let
-        fromCoords = L.catMaybes $ M.values state.selectedWorlds
+        fromCoords =
+          L.catMaybes $ (flip M.lookup state.coordinateMap) <$> L.fromFoldable state.selectedWorlds
         toCoords = state.mouseAt
       in
        HH.div [ HP.ref canvasRef
@@ -146,8 +150,15 @@ clickedWorlds mouseEvent = do
   L.filterM (fromMaybeM false <<< clicked) worlds
 
 getWorldCoordinates :: List W.Id ->
-                       H.ParentDSL State Query W.Query W.Slot Void Aff (Map W.Id (Maybe Coordinates))
+                       H.ParentDSL State Query W.Query W.Slot Void Aff (Map W.Id Coordinates)
 getWorldCoordinates worlds = do
+  coordinateMap <- H.gets (_.coordinateMap)
+  let ids = S.fromFoldable worlds
+  pure $ M.filterKeys (\id -> S.member id ids) coordinateMap
+
+getQueriedCoordinates :: List W.Id ->
+                         H.ParentDSL State Query W.Query W.Slot Void Aff (Map W.Id (Maybe Coordinates))
+getQueriedCoordinates worlds = do
   coords <- getBackFrom (W.Slot <$> worlds) go Nil W.GetCoordinates
   let zipped = L.zip worlds (L.reverse coords)
   pure $ M.fromFoldable zipped
@@ -162,15 +173,24 @@ eval (Click mouseEvent next) =
       coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
       nextId <- H.gets _.maxId
       worlds <- H.gets _.worlds
-      H.modify_ (_ { worlds = nextId : worlds, maxId = nextId + 1})
+      coordinateMap <- H.gets _.coordinateMap
+      let newMap = M.insert nextId coordinates coordinateMap
+      H.modify_ (_ { worlds = nextId : worlds
+                   , maxId = nextId + 1
+                   , coordinateMap = newMap
+                   })
       _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition coordinates)
       pure next
     RemovingWorlds -> do
       worlds <- H.gets (_.worlds >>> L.fromFoldable)
       ids <- clickedWorlds mouseEvent
+      coordinateMap <- H.gets (_.coordinateMap)
       let removed = S.fromFoldable ids
           newWorlds = A.fromFoldable $ L.filter (\id -> not S.member id removed) worlds
-      H.modify_ (_ { worlds = newWorlds })
+          newMap = L.foldl (flip M.delete) coordinateMap ids
+      H.modify_ (_ { worlds = newWorlds
+                   , coordinateMap = newMap
+                   })
       pure next
     DraggingWorlds -> do
       coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
@@ -178,27 +198,27 @@ eval (Click mouseEvent next) =
     AddingRelations -> do
       selected <- H.gets (_.selectedWorlds)
       ids <- clickedWorlds mouseEvent
-      case M.isEmpty selected of
+      case S.isEmpty selected of
         true -> do
-          newSelected <- clickedWorlds mouseEvent >>= getWorldCoordinates
-          H.modify_ (_ { selectedWorlds = newSelected })
+          newSelected <- clickedWorlds mouseEvent
+          H.modify_ (_ { selectedWorlds = S.fromFoldable newSelected })
         false -> do
           let
-            relFrom = L.fromFoldable $ M.keys selected
+            relFrom = L.fromFoldable selected
             relTo = S.fromFoldable $ ids
           _ <- passAlongTo (W.Slot <$> relFrom) (W.AddRelation relTo)
-          H.modify_ (_ { selectedWorlds = M.empty :: Map W.Id (Maybe Coordinates) })
+          H.modify_ (_ { selectedWorlds = S.empty :: Set W.Id })
       pure next
 eval (MouseMove mouseEvent next) = do
   selected <- H.gets (_.selectedWorlds)
   baseCoordinates <-
       H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
-  coordinates <- case M.isEmpty selected of
+  coordinates <- case S.isEmpty selected of
     true -> pure $ L.singleton baseCoordinates
     false -> do
       coords <- clickedWorlds mouseEvent >>= getWorldCoordinates
       pure $
-        case L.catMaybes $ M.values coords of
+        case M.values coords of
           Nil -> L.singleton baseCoordinates
           other -> other
   H.modify_ (_ { mouseAt = coordinates })
