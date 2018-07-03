@@ -23,6 +23,7 @@ import Halogen.HTML.Properties as HP
 import Web.UIEvent.MouseEvent (MouseEvent)
 
 data CanvasState = AddingWorlds | RemovingWorlds | DraggingWorlds | AddingRelations
+derive instance eqCanvasState :: Eq CanvasState
 
 type State =
   { worlds :: Array W.Id
@@ -91,21 +92,23 @@ render state =
   ]
   where
     mkButton :: String -> String ->
+                Boolean ->
                 (Unit -> Query Unit) ->
                 H.ParentHTML Query W.Query W.Slot m
-    mkButton text class_ query =
+    mkButton text class_ disabled query =
       HH.button [ HP.class_ $ HH.ClassName ("pure-button button-" <> class_)
                 , HE.onClick $ HE.input_ query
+                , HP.disabled disabled
                 ]
       [ HH.text text ]
 
     renderSidebar :: H.ParentHTML Query W.Query W.Slot m
     renderSidebar =
       HH.div [ HP.class_ $ HH.ClassName "pure-u-1-3 sidebar" ]
-      [ mkButton "Add Worlds" "secondary" (ChangeCanvasState AddingWorlds)
-      , mkButton "Remove Worlds" "error" (ChangeCanvasState RemovingWorlds)
-      , mkButton "Add Relations" "success" (ChangeCanvasState AddingRelations)
-      , mkButton "Drag Worlds" "warning" (ChangeCanvasState DraggingWorlds)
+      [ mkButton "Add Worlds" "secondary" (state.canvasState == AddingWorlds) (ChangeCanvasState AddingWorlds)
+      , mkButton "Remove Worlds" "error" (state.canvasState == RemovingWorlds) (ChangeCanvasState RemovingWorlds)
+      , mkButton "Add Relations" "success" (state.canvasState == AddingRelations) (ChangeCanvasState AddingRelations)
+      , mkButton "Drag Worlds" "warning" (state.canvasState == DraggingWorlds) (ChangeCanvasState DraggingWorlds)
       ]
 
     renderCanvas :: Array W.Id ->
