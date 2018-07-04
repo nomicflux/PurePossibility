@@ -1,6 +1,7 @@
 module Logic.RelationMapST
        ( RelationMapST
        , withRelationMap
+       , addVariableST
        , addRelationST
        , rmRelationST
        , flipRelationST

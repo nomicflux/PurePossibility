@@ -8,7 +8,6 @@ import Component.Common.MouseOffset (getCoordinates)
 import Component.Common.SVG as SVG
 import Component.Relation (renderRelations)
 import Component.World as W
-import Data.Array ((:))
 import Data.Array as A
 import Data.List (List(..))
 import Data.List as L
@@ -23,6 +22,8 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Logic.RelationMap (RelationMap)
+import Logic.RelationMap as R
 import Web.UIEvent.MouseEvent (MouseEvent)
 
 data CanvasState = AddingWorlds
@@ -33,24 +34,24 @@ data CanvasState = AddingWorlds
 derive instance eqCanvasState :: Eq CanvasState
 
 type State =
-  { worlds :: Array W.Id
-  , maxId :: Int
+  { worlds :: Set W.Id
+  , maxId :: Maybe Int
   , canvasState :: CanvasState
   , selectedWorlds :: Set W.Id
   , mouseAt :: List Coordinates
   , coordinateMap :: Map W.Id Coordinates
-  , relationMap :: Map W.Id (Set W.Id)
+  , relationMap :: RelationMap
   }
 
 initialState :: State
 initialState =
-  { worlds: []
-  , maxId: 0
+  { worlds: S.empty
+  , maxId: Nothing
   , canvasState: AddingWorlds
   , selectedWorlds: S.empty
   , mouseAt: Nil
   , coordinateMap: M.empty
-  , relationMap: M.empty
+  , relationMap: R.empty
   }
 
 data Query a =
@@ -81,7 +82,7 @@ render :: forall m. State -> H.ParentHTML Query W.Query W.Slot m
 render state =
   HH.div [ HP.class_ $ HH.ClassName "pure-g" ]
   [ renderSidebar
-  , renderCanvas state.worlds
+  , renderCanvas $ A.fromFoldable state.worlds
   ]
   where
     mkButton :: String -> String ->
@@ -114,7 +115,7 @@ render state =
         addingToCoords = state.mouseAt
         addingRelations = renderRelations addingFromCoords addingToCoords
 
-        relWorlds = A.fromFoldable $ M.keys state.relationMap
+        relWorlds = A.fromFoldable state.worlds
         existingRelations = A.concatMap renderRelationsFrom relWorlds
       in
        HH.div [ HP.ref canvasRef
@@ -136,9 +137,8 @@ render state =
 getRelCoordinates :: State -> W.Id -> Maybe (Tuple Coordinates (List Coordinates))
 getRelCoordinates state id = do
   fromCoords <- M.lookup id state.coordinateMap
-  fromRels <- M.lookup id state.relationMap
   let
-    toCoords :: List (Maybe Coordinates)
+    fromRels = R.getRelationsFrom id state.relationMap
     toCoords = L.foldl (\acc i -> Cons (M.lookup i state.coordinateMap) acc) Nil (L.fromFoldable fromRels)
   pure $ Tuple fromCoords (L.catMaybes toCoords)
 
@@ -172,29 +172,42 @@ getQueriedCoordinates worlds = do
     go :: List (Maybe Coordinates) -> Maybe Coordinates -> List (Maybe Coordinates)
     go = flip L.Cons
 
+getNextId :: forall m. H.ParentDSL State Query W.Query W.Slot Void m W.Id
+getNextId = do
+  state <- H.get
+  let allIds = maybe S.empty (S.fromFoldable <<< A.range 0) state.maxId
+      missing = S.difference allIds state.worlds
+  case S.isEmpty missing of
+    false -> pure $ fromMaybe 0 (S.findMin missing)
+    true -> do
+      let newMax = maybe 0 (_ + 1) state.maxId
+          newVars = R.addVariable state.relationMap
+      H.modify_ (_ { maxId = Just newMax
+                   , relationMap = newVars
+                   })
+      pure newMax
+
 eval :: Query ~> H.ParentDSL State Query W.Query W.Slot Void Aff
 eval (Click mouseEvent next) =
   H.gets (_.canvasState) >>= case _ of
     AddingWorlds -> do
       coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
-      nextId <- H.gets _.maxId
+      nextId <- getNextId
       worlds <- H.gets _.worlds
       coordinateMap <- H.gets _.coordinateMap
       let newMap = M.insert nextId coordinates coordinateMap
-      H.modify_ (_ { worlds = nextId : worlds
-                   , maxId = nextId + 1
-                   })
+      H.modify_ (_ { worlds = S.insert nextId worlds })
       _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition coordinates)
       pure next
     RemovingWorlds -> do
-      worlds <- H.gets (_.worlds >>> L.fromFoldable)
+      worlds <- H.gets (_.worlds)
       ids <- clickedWorlds mouseEvent
       coordinateMap <- H.gets (_.coordinateMap)
       relationMap <- H.gets (_.relationMap)
       let removed = S.fromFoldable ids
-          newWorlds = A.fromFoldable $ L.filter (\id -> not S.member id removed) worlds
+          newWorlds = S.difference worlds removed
           newCMap = L.foldl (flip M.delete) coordinateMap ids
-          newRMap = L.foldl (flip M.delete) relationMap ids
+          newRMap = L.foldl (flip R.rmVariable) relationMap ids
       H.modify_ (_ { worlds = newWorlds
                    , coordinateMap = newCMap
                    , relationMap = newRMap
@@ -248,6 +261,6 @@ eval (HandleWorld id (W.PositionChanged coordinates) next) = do
   pure next
 eval (HandleWorld id (W.RelationsChanged relations) next) = do
   relMap <- H.gets (_.relationMap)
-  let newMap = M.insert id relations relMap
+  let newMap = R.replaceRelations id relations relMap
   H.modify_ (_ { relationMap = newMap })
   pure next
