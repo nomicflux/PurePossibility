@@ -6,7 +6,7 @@ module Logic.Properties
        ) where
 
 import Data.Array as A
-import Data.Function (($))
+import Data.Function (applyN, ($))
 import Data.List (List)
 import Data.List as L
 import Logic.RelationMap (RelationMap)
@@ -28,10 +28,14 @@ symmetric :: Property
 symmetric rels =
   L.foldl (\acc var -> R.addRelationsTo (R.getRelationsFrom var rels) var acc) rels (varRange rels)
 
-transitive :: Property
-transitive rels =
+transitive' :: Property
+transitive' rels =
   L.foldl (\acc var ->
             R.addRelations var (A.concatMap (\v ->
                                               R.getRelationsFrom v rels)
                                 $ R.getRelationsFrom var rels)
             acc) rels (varRange rels)
+
+transitive :: Property
+transitive rels =
+  applyN transitive' ((R.numVars rels) - 1) rels

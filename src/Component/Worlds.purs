@@ -22,10 +22,15 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Logic.Properties as P
 import Logic.RelationMap (RelationMap)
 import Logic.RelationMap as R
 import Web.UIEvent.MouseEvent (MouseEvent)
 import Web.UIEvent.MouseEvent as ME
+
+data SystemAttribute = Reflexive | Symmetric | Transitive
+derive instance eqSystemAttribute :: Eq SystemAttribute
+derive instance ordSystemAttribute :: Ord SystemAttribute
 
 data CanvasState = AddingWorlds
                  | AddingRelations
@@ -36,9 +41,11 @@ type State =
   , maxId :: Maybe Int
   , canvasState :: CanvasState
   , selectedWorlds :: Set W.Id
+  , draggingWorlds :: Set W.Id
   , mouseAt :: List Coordinates
   , coordinateMap :: Map W.Id Coordinates
   , relationMap :: RelationMap
+  , systemAttributes :: Set SystemAttribute
   }
 
 initialState :: State
@@ -47,14 +54,17 @@ initialState =
   , maxId: Nothing
   , canvasState: AddingWorlds
   , selectedWorlds: S.empty
+  , draggingWorlds: S.empty
   , mouseAt: Nil
   , coordinateMap: M.empty
   , relationMap: R.empty
+  , systemAttributes: S.empty
   }
 
 data Query a =
   Click MouseEvent a
   | MouseMove MouseEvent a
+  | ChangeAttribute SystemAttribute Boolean a
   | ChangeCanvasState CanvasState a
   | HandleWorld W.Id W.Message a
 
@@ -91,14 +101,31 @@ render state =
       HH.button [ HP.class_ $ HH.ClassName ("pure-button button-" <> class_)
                 , HE.onClick $ HE.input_ query
                 , HP.disabled disabled
+                , HP.type_ $ HP.ButtonButton
                 ]
       [ HH.text text ]
+
+    mkCheckbox :: String -> (Boolean -> Unit -> Query Unit) ->
+                  H.ParentHTML Query W.Query W.Slot m
+    mkCheckbox text query =
+      HH.div_ [ HH.input [ HP.class_ (HH.ClassName "attr-checkbox")
+                         , HP.type_ HP.InputCheckbox
+                         , HE.onChecked $ HE.input query
+                         , HP.title text
+                         ]
+              , HH.label_ [HH.text text]
+              ]
 
     renderSidebar :: H.ParentHTML Query W.Query W.Slot m
     renderSidebar =
       HH.div [ HP.class_ $ HH.ClassName "pure-u-1-4 sidebar" ]
       [ mkButton "Add / Remove Worlds" "secondary" (state.canvasState == AddingWorlds) (ChangeCanvasState AddingWorlds)
       , mkButton "Add / Remove Relations" "success" (state.canvasState == AddingRelations) (ChangeCanvasState AddingRelations)
+      , HH.form [ HP.class_ $ HH.ClassName "pure-form" ]
+        [ mkCheckbox "Reflexive" (ChangeAttribute Reflexive)
+        , mkCheckbox "Symmetric" (ChangeAttribute Symmetric)
+        , mkCheckbox "Transitive" (ChangeAttribute Transitive)
+        ]
       ]
 
     renderCanvas :: Array W.Id ->
@@ -108,10 +135,14 @@ render state =
         addingFromCoords =
           L.catMaybes $ (flip M.lookup state.coordinateMap) <$> L.fromFoldable state.selectedWorlds
         addingToCoords = state.mouseAt
-        addingRelations = renderRelations addingFromCoords addingToCoords
+        addingRelations = renderRelations "adding" addingFromCoords addingToCoords
 
         relWorlds = A.fromFoldable state.worlds
-        existingRelations = A.concatMap renderRelationsFrom relWorlds
+        existingRelations = A.concatMap (renderRelationsFrom state.coordinateMap "selected" state.relationMap) relWorlds
+
+        genRels = applyAttributes state.systemAttributes state.relationMap
+        justNew = R.newRelations state.relationMap genRels
+        generatedRelations = A.concatMap (renderRelationsFrom state.coordinateMap "generated" justNew) relWorlds
       in
        HH.div [ HP.ref canvasRef
               , HP.class_ $ HH.ClassName "pure-u-3-4 world-canvas"
@@ -122,19 +153,31 @@ render state =
                  , SVG.class_ "world-svg"
                  , HE.onClick (HE.input Click)
                  , HE.onMouseMove (HE.input MouseMove)
-                 ] $ (renderWorld <$> worlds) <> addingRelations <> existingRelations
+                 ] $ (renderWorld <$> worlds) <> addingRelations <> existingRelations <> generatedRelations
        ]
 
-    renderRelationsFrom :: W.Id -> Array (H.ParentHTML Query W.Query W.Slot m)
-    renderRelationsFrom w =
-      maybe [] (\(Tuple from to) -> renderRelations (L.singleton from) to) (getRelCoordinates state w)
+applyAttributes :: Set SystemAttribute -> RelationMap -> RelationMap
+applyAttributes attrs =
+  applyTransitive <<< applySymmetric <<< applyReflexive
+  where
+    applyReflexive r = if S.member Reflexive attrs then P.reflexive r else r
+    applySymmetric r = if S.member Symmetric attrs then P.symmetric r else r
+    applyTransitive r = if S.member Transitive attrs then P.transitive r else r
 
-getRelCoordinates :: State -> W.Id -> Maybe (Tuple Coordinates (List Coordinates))
-getRelCoordinates state id = do
-  fromCoords <- M.lookup id state.coordinateMap
+renderRelationsFrom :: forall m.
+                       Map W.Id Coordinates ->
+                       String -> RelationMap ->
+                       W.Id ->
+                       Array (H.ParentHTML Query W.Query W.Slot m)
+renderRelationsFrom coords class_ rels w =
+  maybe [] (\(Tuple from to) -> renderRelations class_ (L.singleton from) to) (getRelCoordinates coords rels w)
+
+getRelCoordinates :: Map W.Id Coordinates -> RelationMap -> W.Id -> Maybe (Tuple Coordinates (List Coordinates))
+getRelCoordinates coords rels id = do
+  fromCoords <- M.lookup id coords
   let
-    fromRels = R.getRelationsFrom id state.relationMap
-    toCoords = L.foldl (\acc i -> Cons (M.lookup i state.coordinateMap) acc) Nil (L.fromFoldable fromRels)
+    fromRels = R.getRelationsFrom id rels
+    toCoords = L.foldl (\acc i -> Cons (M.lookup i coords) acc) Nil (L.fromFoldable fromRels)
   pure $ Tuple fromCoords (L.catMaybes toCoords)
 
 fromMaybeM :: forall a m.
@@ -257,6 +300,12 @@ eval (MouseMove mouseEvent next) = do
 eval (ChangeCanvasState newState next) = do
     H.modify_ (_ { canvasState = newState })
     pure next
+eval (ChangeAttribute attr val next) = do
+  attrs <- H.gets (_.systemAttributes)
+  case val of
+    true -> H.modify_ (_ { systemAttributes = S.insert attr attrs })
+    false -> H.modify_ (_ { systemAttributes = S.delete attr attrs })
+  pure next
 eval (HandleWorld id (W.PositionChanged coordinates) next) = do
   coordMap <- H.gets (_.coordinateMap)
   let newMap = M.insert id coordinates coordMap
