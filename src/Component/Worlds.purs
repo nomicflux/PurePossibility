@@ -25,12 +25,10 @@ import Halogen.HTML.Properties as HP
 import Logic.RelationMap (RelationMap)
 import Logic.RelationMap as R
 import Web.UIEvent.MouseEvent (MouseEvent)
+import Web.UIEvent.MouseEvent as ME
 
 data CanvasState = AddingWorlds
-                 | RemovingWorlds
-                 | DraggingWorlds
                  | AddingRelations
-                 | RemovingRelations
 derive instance eqCanvasState :: Eq CanvasState
 
 type State =
@@ -99,11 +97,8 @@ render state =
     renderSidebar :: H.ParentHTML Query W.Query W.Slot m
     renderSidebar =
       HH.div [ HP.class_ $ HH.ClassName "pure-u-1-4 sidebar" ]
-      [ mkButton "Add Worlds" "secondary" (state.canvasState == AddingWorlds) (ChangeCanvasState AddingWorlds)
-      , mkButton "Remove Worlds" "error" (state.canvasState == RemovingWorlds) (ChangeCanvasState RemovingWorlds)
-      , mkButton "Add Relations" "success" (state.canvasState == AddingRelations) (ChangeCanvasState AddingRelations)
-      , mkButton "Remove Relations" "primary" (state.canvasState == RemovingRelations) (ChangeCanvasState RemovingRelations)
-      , mkButton "Drag Worlds" "warning" (state.canvasState == DraggingWorlds) (ChangeCanvasState DraggingWorlds)
+      [ mkButton "Add / Remove Worlds" "secondary" (state.canvasState == AddingWorlds) (ChangeCanvasState AddingWorlds)
+      , mkButton "Add / Remove Relations" "success" (state.canvasState == AddingRelations) (ChangeCanvasState AddingRelations)
       ]
 
     renderCanvas :: Array W.Id ->
@@ -187,56 +182,64 @@ getNextId = do
                    })
       pure newMax
 
+keyPressed :: MouseEvent -> Boolean
+keyPressed mouseEvent =
+  ME.altKey mouseEvent || ME.shiftKey mouseEvent || ME.metaKey mouseEvent
+
+rightClicked :: MouseEvent -> Boolean
+rightClicked mouseEvent =
+  let x = ME.button mouseEvent
+  in x == 2 || x == 3
+
 eval :: Query ~> H.ParentDSL State Query W.Query W.Slot Void Aff
 eval (Click mouseEvent next) =
   H.gets (_.canvasState) >>= case _ of
     AddingWorlds -> do
-      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
-      nextId <- getNextId
       worlds <- H.gets _.worlds
-      coordinateMap <- H.gets _.coordinateMap
-      let newMap = M.insert nextId coordinates coordinateMap
-      H.modify_ (_ { worlds = S.insert nextId worlds })
-      _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition coordinates)
-      pure next
-    RemovingWorlds -> do
-      worlds <- H.gets (_.worlds)
-      ids <- clickedWorlds mouseEvent
-      coordinateMap <- H.gets (_.coordinateMap)
-      relationMap <- H.gets (_.relationMap)
-      let removed = S.fromFoldable ids
-          newWorlds = S.difference worlds removed
-          newCMap = L.foldl (flip M.delete) coordinateMap ids
-          newRMap = L.foldl (flip R.rmVariable) relationMap ids
-      H.modify_ (_ { worlds = newWorlds
-                   , coordinateMap = newCMap
-                   , relationMap = newRMap
-                   })
-      pure next
-    DraggingWorlds -> do
-      coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
-      pure next
-    AddingRelations -> do
-      selected <- H.gets (_.selectedWorlds)
-      ids <- clickedWorlds mouseEvent
-      case S.isEmpty selected of
+      case (keyPressed mouseEvent || rightClicked mouseEvent) of
         true -> do
-          newSelected <- clickedWorlds mouseEvent
-          coords <- getWorldCoordinates newSelected
-          H.modify_ (_ { selectedWorlds = S.fromFoldable newSelected
-                       , mouseAt = M.values coords
+          ids <- clickedWorlds mouseEvent
+          coordinateMap <- H.gets (_.coordinateMap)
+          relationMap <- H.gets (_.relationMap)
+          let removed = S.fromFoldable ids
+              newWorlds = S.difference worlds removed
+              newCMap = L.foldl (flip M.delete) coordinateMap ids
+              newRMap = L.foldl (flip R.rmVariable) relationMap ids
+          H.modify_ (_ { worlds = newWorlds
+                       , coordinateMap = newCMap
+                       , relationMap = newRMap
                        })
+          pure next
         false -> do
-          let
-            relFrom = L.fromFoldable selected
-            relTo = S.fromFoldable $ ids
-          _ <- passAlongTo (W.Slot <$> relFrom) (W.AddRelation relTo)
-          H.modify_ (_ { selectedWorlds = S.empty :: Set W.Id })
-      pure next
-    RemovingRelations -> do
+          coordinates <- H.getRef canvasRef >>= (H.liftEffect <<< getCoordinates mouseEvent)
+          nextId <- getNextId
+          coordinateMap <- H.gets _.coordinateMap
+          let newMap = M.insert nextId coordinates coordinateMap
+          H.modify_ (_ { worlds = S.insert nextId worlds })
+          _ <- H.query (W.Slot nextId) $ H.request (W.ChangePosition coordinates)
+          pure next
+    AddingRelations -> do
       ids <- clickedWorlds mouseEvent
-      _ <- passAlongTo (W.Slot <$> ids) W.RemoveRelations
-      pure next
+      case (keyPressed mouseEvent || rightClicked mouseEvent) of
+        true -> do
+          _ <- passAlongTo (W.Slot <$> ids) W.RemoveRelations
+          pure next
+        false -> do
+          selected <- H.gets (_.selectedWorlds)
+          case S.isEmpty selected of
+            true -> do
+              newSelected <- clickedWorlds mouseEvent
+              coords <- getWorldCoordinates newSelected
+              H.modify_ (_ { selectedWorlds = S.fromFoldable newSelected
+                           , mouseAt = M.values coords
+                           })
+            false -> do
+              let
+                relFrom = L.fromFoldable selected
+                relTo = S.fromFoldable $ ids
+              _ <- passAlongTo (W.Slot <$> relFrom) (W.AddRelation relTo)
+              H.modify_ (_ { selectedWorlds = S.empty :: Set W.Id })
+          pure next
 eval (MouseMove mouseEvent next) = do
   selected <- H.gets (_.selectedWorlds)
   baseCoordinates <-
