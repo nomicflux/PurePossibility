@@ -38,3 +38,8 @@
 .button-secondary {
     background: rgb(66, 184, 221); /* this is a light blue */
 }
+
+.relation {
+    stroke: grey;
+    fill: transparent;
+}

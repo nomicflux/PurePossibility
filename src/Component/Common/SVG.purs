@@ -1,5 +1,6 @@
 module Component.Common.SVG where
 
+import Data.Array as A
 import Halogen.HTML (AttrName(..), ElemName(..), HTML, Namespace(..))
 import Halogen.HTML.Elements (elementNS)
 import Halogen.HTML.Properties (IProp, attr)
@@ -28,6 +29,30 @@ rect props = svgElement (ElemName "rect") props []
 
 line :: forall r p i. Array (IProp r i) -> HTML p i
 line props = svgElement (ElemName "line") props []
+
+arc :: forall r p i. Array (IProp r i) -> HTML p i
+arc props = svgElement (ElemName "path") props []
+
+circlePath :: forall r i.
+              Number -> Number ->
+              Number ->
+              Number -> Number -> IProp (circlePath :: String | r) i
+circlePath fromx fromy radius tox toy =
+  let
+    path = A.intercalate " " [ "M"
+                             , show fromx
+                             , show fromy
+                             , "A"
+                             , show radius
+                             , show radius
+                             , "0"
+                             , "1"
+                             , "1"
+                             , show tox
+                             , show toy
+                             ]
+  in
+   attr (AttrName "d") path
 
 width :: forall r i. Int -> IProp (width :: Int | r) i
 width = attr (AttrName "width") <<< show
