@@ -10,4 +10,4 @@ selfRelationRadius :: Number
 selfRelationRadius = (toNumber worldRadius) * 0.75
 
 arrowHeadLength :: Number
-arrowHeadLength = (toNumber worldRadius) * 0.25
+arrowHeadLength = (toNumber worldRadius) * 0.5

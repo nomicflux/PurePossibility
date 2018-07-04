@@ -46,7 +46,6 @@
 
 .relation.relation-adding {
     stroke: #666;
-    opacity: 0.7;
 }
 
 .relation.relation-selected {
@@ -56,5 +55,5 @@
 
 .relation.relation-generated {
     stroke: #999;
-    stroke-dasharray: "5,5";
+    stroke-dasharray: 2;
 }
