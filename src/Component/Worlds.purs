@@ -3,13 +3,13 @@ module Component.Worlds where
 import Prelude
 
 import Component.Common.Communication (getBackFrom, passAlongTo)
-import Component.Common.Constants (arrowHeadLength, selfRelationRadius, worldRadius)
-import Component.Common.Offset (Coordinates, getCoordinates)
+import Component.Common.Coordinates (Coordinates)
+import Component.Common.MouseOffset (getCoordinates)
 import Component.Common.SVG as SVG
+import Component.Relation (renderRelations)
 import Component.World as W
 import Data.Array ((:))
 import Data.Array as A
-import Data.Int (round, toNumber)
 import Data.List (List(..))
 import Data.List as L
 import Data.Map (Map)
@@ -23,8 +23,6 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Math (acos, asin, atan, atan2, cos, sin, sqrt)
-import Math as Math
 import Web.UIEvent.MouseEvent (MouseEvent)
 
 data CanvasState = AddingWorlds
@@ -78,75 +76,6 @@ renderWorld id =
 
 canvasRef :: H.RefLabel
 canvasRef = H.RefLabel "world-canvas"
-
-renderRelations :: forall m.
-                   List Coordinates ->
-                   List Coordinates ->
-                   Array (H.ParentHTML Query W.Query W.Slot m)
-renderRelations from to =
-  A.fromFoldable $ do
-    fromCoord <- from
-    toCoord <- to
-    case eqCoord fromCoord toCoord of
-      true -> L.singleton (renderSelfRelation fromCoord)
-      false -> Cons (renderRelation fromCoord toCoord) (renderArrow fromCoord toCoord)
-  where
-    eqCoord :: Coordinates -> Coordinates -> Boolean
-    eqCoord f t = f.x == t.x && f.y == t.y
-
-    renderArrow f t =
-      let
-        xdiff = t.x - f.x
-        ydiff = t.y - f.y
-        angle = Math.atan2 ydiff xdiff
-        leftAngle = angle + 0.75 * Math.pi
-        rightAngle = leftAngle + Math.pi / 2.0
-        xOnCircle = t.x - toNumber worldRadius * (cos angle)
-        yOnCircle = t.y - toNumber worldRadius * (sin angle)
-        xOffsetLeft = arrowHeadLength * (cos leftAngle)
-        xOffsetRight = arrowHeadLength * (cos rightAngle)
-        yOffsetLeft = arrowHeadLength * (sin leftAngle)
-        yOffsetRight = arrowHeadLength * (sin rightAngle)
-
-      in
-       L.fromFoldable [ SVG.line [ SVG.x1 $ round xOnCircle
-                                 , SVG.y1 $ round yOnCircle
-                                 , SVG.x2 $ round (xOnCircle + xOffsetLeft)
-                                 , SVG.y2 $ round (yOnCircle + yOffsetLeft)
-                                 , SVG.class_ "relation relation-arrow"
-                                 ]
-                      , SVG.line [ SVG.x1 $ round xOnCircle
-                                 , SVG.y1 $ round yOnCircle
-                                 , SVG.x2 $ round (xOnCircle + xOffsetRight)
-                                 , SVG.y2 $ round (yOnCircle + yOffsetRight)
-                                 , SVG.class_ "relation relation-arrow"
-                                 ]
-                      ]
-
-    renderSelfRelation c =
-      let
-        numRadius = toNumber worldRadius
-        offsetY = numRadius * (sqrt 3.0 / 2.0)
-        offsetX = numRadius * (1.0 / 2.0)
-      in
-       SVG.arc [ SVG.circlePath (c.x + offsetX) (c.y + offsetY) selfRelationRadius (c.x - offsetX) (c.y + offsetY)
-               , SVG.class_ "relation self-relation"
-               ]
-
-    renderRelation f t =
-      let
-        xdiff = t.x - f.x
-        ydiff = t.y - f.y
-        angle = atan2 ydiff xdiff
-        xToCircle = toNumber worldRadius * (cos angle)
-        yToCircle = toNumber worldRadius * (sin angle)
-      in
-       SVG.line [ SVG.x1 $ round (f.x + xToCircle)
-                , SVG.y1 $ round (f.y + yToCircle)
-                , SVG.x2 $ round (t.x - xToCircle)
-                , SVG.y2 $ round (t.y - yToCircle)
-                , SVG.class_ "relation other-relation"
-                ]
 
 render :: forall m. State -> H.ParentHTML Query W.Query W.Slot m
 render state =

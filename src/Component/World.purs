@@ -3,7 +3,7 @@ module Component.World where
 import Prelude
 
 import Component.Common.Constants (worldRadius)
-import Component.Common.Offset (Coordinates)
+import Component.Common.Coordinates (Coordinates)
 import Component.Common.SVG as SVG
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..))
