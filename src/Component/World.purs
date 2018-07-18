@@ -3,14 +3,14 @@ module Component.World where
 import Prelude
 
 import Component.Common.Constants (worldRadius)
-import Component.Common.Coordinates (Coordinates)
-import Component.Common.SVG as SVG
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..))
 import Data.Set (Set)
 import Data.Set as S
 import Halogen as H
 import Halogen.HTML as HH
+import HalogenHelpers.Coordinates (Coordinates)
+import HalogenHelpers.SVG as SVG
 
 type Id = Int
 

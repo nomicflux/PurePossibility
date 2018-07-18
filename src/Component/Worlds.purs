@@ -2,10 +2,6 @@ module Component.Worlds where
 
 import Prelude
 
-import Component.Common.Communication (getBackFrom, passAlongTo)
-import Component.Common.Coordinates (Coordinates)
-import Component.Common.MouseOffset (getCoordinates)
-import Component.Common.SVG as SVG
 import Component.Relation (renderRelations)
 import Component.World as W
 import Data.Array as A
@@ -22,6 +18,10 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import HalogenHelpers.Communication (getBackFrom, passAlongTo)
+import HalogenHelpers.Coordinates (Coordinates)
+import HalogenHelpers.MouseOffset (getCoordinates)
+import HalogenHelpers.SVG as SVG
 import Logic.Properties as P
 import Logic.RelationMap (RelationMap)
 import Logic.RelationMap as R

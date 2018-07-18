@@ -3,14 +3,15 @@ module Component.Relation where
 import Prelude
 
 import Component.Common.Constants (arrowHeadLength, selfRelationRadius, worldRadius)
-import Component.Common.Coordinates (Coordinates, Offset, addOffset, subOffset)
-import Component.Common.SVG as SVG
 import Data.Array as A
 import Data.Int (round, toNumber)
 import Data.List (List(..))
 import Data.List as L
 import Halogen as H
+import HalogenHelpers.Coordinates (Coordinates, Offset, addOffset, subOffset)
+import HalogenHelpers.SVG as SVG
 import Math as Math
+
 
 getAngle :: Coordinates -> Coordinates -> Number
 getAngle from to =

@@ -1,5 +1,5 @@
 {
-  "name": "PurePossibility",
+  "name": "pure-possibility",
   "ignore": [
     "**/.*",
     "node_modules",
@@ -10,10 +10,11 @@
     "purescript-prelude": "^4.0.1",
     "purescript-console": "^4.1.0",
     "purescript-effect": "^2.0.0",
-    "purescript-spec": "^3.0.0"
+    "purescript-spec": "^3.0.0",
+    "purescript-halogen": "^4.0.0",
+    "purescript-halogen-helpers": "git://github.com/nomicflux/HalogenHelpers.git"
   },
   "devDependencies": {
-    "purescript-psci-support": "^4.0.0",
-    "purescript-halogen": "^4.0.0"
+    "purescript-psci-support": "^4.0.0"
   }
 }
